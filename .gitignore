@@ -26,6 +26,7 @@ go.work.sum
 
 # Build artifacts
 /gitglimpse
+git-glimpse
 
 # env file
 .env

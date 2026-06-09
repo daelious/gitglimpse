@@ -8,21 +8,30 @@ import (
 )
 
 type stubDoer struct {
-	resp *http.Response
-	err  error
+	resps []*http.Response
+	err   error
+	idx   int
 }
 
-func (s stubDoer) Do(req *http.Request) (*http.Response, error) {
-	return s.resp, s.err
+func (s *stubDoer) Do(req *http.Request) (*http.Response, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.idx >= len(s.resps) {
+		return nil, io.EOF
+	}
+	resp := s.resps[s.idx]
+	s.idx++
+	return resp, nil
 }
 
 func TestNewGitHubRequest(t *testing.T) {
-	_, err := newGitHubRequest("   ")
+	_, err := newGitHubRequest("   ", "https://api.github.com/user")
 	if err == nil {
 		t.Fatal("expected error when token is empty")
 	}
 
-	req, err := newGitHubRequest("  token  ")
+	req, err := newGitHubRequest("  token  ", "https://api.github.com/user")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,12 +70,47 @@ func TestParseGitHubUserResponse_ErrorBody(t *testing.T) {
 	}
 }
 
-func TestFetchGitHubUserWithClient(t *testing.T) {
-	resp := &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader(`{"login":"eve","name":"Eve"}`)),
+func TestParseSearchTotalCountResponse(t *testing.T) {
+	count, err := parseSearchTotalCountResponse([]byte(`{"total_count": 7}`), http.StatusOK)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	msg := fetchGitHubUserWithClient(stubDoer{resp: resp}, "token")
+	if count != 7 {
+		t.Fatalf("expected 7, got %d", count)
+	}
+}
+
+func TestParseJSONArrayCountResponse(t *testing.T) {
+	count, err := parseJSONArrayCountResponse([]byte(`[{}, {}]`), http.StatusOK)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2, got %d", count)
+	}
+}
+
+func TestFetchGitHubUserDataWithClient(t *testing.T) {
+	responses := []*http.Response{
+		{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"login":"eve","name":"Eve"}`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"total_count": 7}`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`[{}, {}]`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`[{}, {}, {}]`)),
+		},
+	}
+
+	msg := fetchGitHubUserDataWithClient(&stubDoer{resps: responses}, "token")
 	auth, ok := msg.(authMsg)
 	if !ok {
 		t.Fatalf("expected authMsg, got %T", msg)
@@ -76,6 +120,15 @@ func TestFetchGitHubUserWithClient(t *testing.T) {
 	}
 	if auth.login != "eve" || auth.name != "Eve" {
 		t.Fatalf("unexpected auth data: %s %s", auth.login, auth.name)
+	}
+	if auth.openPRCount != 7 {
+		t.Fatalf("expected 7 open PRs, got %d", auth.openPRCount)
+	}
+	if auth.assignedIssueCount != 2 {
+		t.Fatalf("expected 2 assigned issues, got %d", auth.assignedIssueCount)
+	}
+	if auth.recentActivityCount != 3 {
+		t.Fatalf("expected 3 recent activity events, got %d", auth.recentActivityCount)
 	}
 }
 
