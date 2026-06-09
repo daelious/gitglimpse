@@ -62,6 +62,13 @@ Supported expiry formats:
 - The output is cached for 5 minutes by default.
 - If `GITHUB_TOKEN` is missing or invalid, the tool will show an authentication error.
 
+## CI & Releases
+
+This repository includes GitHub Actions workflows for continuous integration and release automation.
+
+- `build.yml` runs on push to `main` and on pull requests.
+- `release.yml` builds cross-platform binaries when a GitHub release is published.
+
 ## Development
 
 Run the package tests with:

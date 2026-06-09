@@ -1,0 +1,34 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: 1.24
+      - name: Run tests
+        run: go test ./...
+      - name: Set binary extension for Windows
+        if: matrix.goos == 'windows'
+        run: echo "EXT=.exe" >> $GITHUB_ENV
+      - name: Build release binary
+        run: |
+          mkdir -p dist
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build -o dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} ./src/cmd/gitglimpse
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${{ env.EXT }}
+          asset_name: gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${{ env.EXT }}
+          asset_content_type: application/octet-stream
