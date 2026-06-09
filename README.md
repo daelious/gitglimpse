@@ -1,5 +1,8 @@
 # gitglimpse
 
+[![CI](https://github.com/daelious/gitglimpse/actions/workflows/build.yml/badge.svg)](https://github.com/daelious/gitglimpse/actions/workflows/build.yml)
+[![Release](https://github.com/daelious/gitglimpse/actions/workflows/release.yml/badge.svg)](https://github.com/daelious/gitglimpse/actions/workflows/release.yml)
+
 gitglimpse is a small Bubble Tea-based GitHub dashboard for quickly checking your current GitHub status from the terminal.
 
 It was built as a lightweight Rust-busting side project to fetch:
@@ -68,6 +71,14 @@ This repository includes GitHub Actions workflows for continuous integration and
 
 - `build.yml` runs on push to `main` and on pull requests.
 - `release.yml` builds cross-platform binaries when a GitHub release is published.
+
+## Contributing
+
+Contributions are welcome. Please read `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` before opening issues or pull requests.
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.
 
 ## Development
 
