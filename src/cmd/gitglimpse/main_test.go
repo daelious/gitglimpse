@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 type stubDoer struct {
@@ -144,5 +145,49 @@ func TestModelUpdateAuthMsg(t *testing.T) {
 	}
 	if updated.login != "joe" || updated.name != "Joe" {
 		t.Fatalf("unexpected updated model: %v", updated)
+	}
+}
+
+func TestParseTokenExpiry(t *testing.T) {
+	cases := []struct {
+		input string
+		ok    bool
+	}{
+		{"2026-06-15T00:00:00Z", true},
+		{"2026-06-15", true},
+		{"2026-06-15 15:04", true},
+		{"invalid-date", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.input, func(t *testing.T) {
+			got, err := parseTokenExpiry(c.input)
+			if c.ok && err != nil {
+				t.Fatalf("expected valid expiry for %q, got %v", c.input, err)
+			}
+			if !c.ok && err == nil {
+				t.Fatalf("expected error for invalid expiry %q", c.input)
+			}
+			if c.ok && got.IsZero() {
+				t.Fatalf("expected non-zero time for %q", c.input)
+			}
+		})
+	}
+}
+
+func TestTokenExpiryWarning(t *testing.T) {
+	future := time.Now().Add(2 * 24 * time.Hour)
+	if warning := tokenExpiryWarning(future); warning == "" {
+		t.Fatal("expected warning for expiry within 7 days")
+	}
+
+	farFuture := time.Now().Add(30 * 24 * time.Hour)
+	if warning := tokenExpiryWarning(farFuture); warning != "" {
+		t.Fatalf("expected no warning for far future expiry, got %q", warning)
+	}
+
+	past := time.Now().Add(-24 * time.Hour)
+	if warning := tokenExpiryWarning(past); !strings.Contains(warning, "expired") {
+		t.Fatalf("expected expired warning, got %q", warning)
 	}
 }

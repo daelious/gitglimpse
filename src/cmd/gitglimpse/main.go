@@ -26,15 +26,8 @@ type model struct {
 	assignedIssueCount  int
 	recentActivityCount int
 	lastUpdated         time.Time
+	tokenExpiry         time.Time
 }
-
-var (
-	titleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
-	labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true)
-	valueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
-	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	panelStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2).Width(60)
-)
 
 type authMsg struct {
 	login               string
@@ -44,7 +37,17 @@ type authMsg struct {
 	assignedIssueCount  int
 	recentActivityCount int
 	lastUpdated         time.Time
+	tokenExpiry         time.Time
 }
+
+var (
+	titleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+	labelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true)
+	valueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
+	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
+	panelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2).Width(60)
+)
 
 func newSpinner() spinner.Model {
 	return spinner.New(
@@ -95,6 +98,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.assignedIssueCount = msg.assignedIssueCount
 		m.recentActivityCount = msg.recentActivityCount
 		m.lastUpdated = msg.lastUpdated
+		m.tokenExpiry = msg.tokenExpiry
 		return m, nil
 	default:
 		return m, nil
@@ -126,7 +130,7 @@ func (m model) View() string {
 		lastUpdated = m.lastUpdated.Format("Jan 2 15:04")
 	}
 
-	body := strings.Join([]string{
+	bodyLines := []string{
 		fmt.Sprintf("%s %s", labelStyle.Render("User:"), valueStyle.Render(identity)),
 		"",
 		fmt.Sprintf("%s %s", labelStyle.Render("Open PRs:"), valueStyle.Render(fmt.Sprintf("%d", m.openPRCount))),
@@ -134,7 +138,13 @@ func (m model) View() string {
 		fmt.Sprintf("%s %s", labelStyle.Render("Recent activity:"), valueStyle.Render(fmt.Sprintf("%d", m.recentActivityCount))),
 		"",
 		fmt.Sprintf("%s %s", labelStyle.Render("Last updated:"), valueStyle.Render(lastUpdated)),
-	}, "\n")
+	}
+
+	if warning := tokenExpiryWarning(m.tokenExpiry); warning != "" {
+		bodyLines = append(bodyLines, "", warningStyle.Render("Warning:"), valueStyle.Render(warning))
+	}
+
+	body := strings.Join(bodyLines, "\n")
 	footer := "Press r to refresh, q/esc to quit."
 	return panelStyle.Render(fmt.Sprintf("%s\n\n%s\n\n%s", title, body, footer))
 }
@@ -202,6 +212,42 @@ func parseSearchTotalCountResponse(body []byte, statusCode int) (int, error) {
 	}
 
 	return result.TotalCount, nil
+}
+
+func parseTokenExpiry(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, nil
+	}
+
+	for _, layout := range []string{
+		time.RFC3339,
+		"2006-01-02",
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+	} {
+		if t, err := time.Parse(layout, value); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid token expiry format: %s", value)
+}
+
+func tokenExpiryWarning(expiry time.Time) string {
+	if expiry.IsZero() {
+		return ""
+	}
+
+	remaining := time.Until(expiry)
+	if remaining <= 0 {
+		return fmt.Sprintf("PAT expired on %s", expiry.Format("Jan 2 2006"))
+	}
+	if remaining > 7*24*time.Hour {
+		return ""
+	}
+
+	days := int((remaining + 23*time.Hour) / 24 / time.Hour)
+	return fmt.Sprintf("PAT expires in %d day(s) on %s", days, expiry.Format("Jan 2 2006"))
 }
 
 func parseJSONArrayCountResponse(body []byte, statusCode int) (int, error) {
@@ -275,6 +321,8 @@ func fetchGitHubUserCommand(force bool) tea.Cmd {
 			return authMsg{err: fmt.Errorf("GITHUB_TOKEN is not set")}
 		}
 
+		tokenExpiry, _ := parseTokenExpiry(os.Getenv("GITHUB_TOKEN_EXPIRES_AT"))
+
 		if !force {
 			if cache, ok := loadCache(); ok {
 				return authMsg{
@@ -284,6 +332,7 @@ func fetchGitHubUserCommand(force bool) tea.Cmd {
 					assignedIssueCount:  cache.AssignedIssueCount,
 					recentActivityCount: cache.RecentActivityCount,
 					lastUpdated:         cache.Timestamp,
+					tokenExpiry:         tokenExpiry,
 				}
 			}
 		}
@@ -294,6 +343,7 @@ func fetchGitHubUserCommand(force bool) tea.Cmd {
 		if !ok {
 			return msg
 		}
+		result.tokenExpiry = tokenExpiry
 		if result.err == nil {
 			cache := cacheData{
 				Login:               result.login,
@@ -309,14 +359,6 @@ func fetchGitHubUserCommand(force bool) tea.Cmd {
 		}
 		return result
 	}
-}
-
-func fetchGitHubUser() tea.Msg {
-	return fetchGitHubUserCommand(false)()
-}
-
-func fetchGitHubUserForce() tea.Msg {
-	return fetchGitHubUserCommand(true)()
 }
 
 func fetchGitHubUserDataWithClient(client httpDoer, token string) tea.Msg {
