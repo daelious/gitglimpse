@@ -1,0 +1,29 @@
+version: 2
+project_name: gitglimpse
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    main: ./src/cmd/gitglimpse
+
+archives:
+  - format: tar.gz
+    # Use zip instead of tar.gz strictly for Windows targets
+    format_overrides:
+      - goos: windows
+        format: zip
+    # These files will be automatically bundled inside the zip/tar.gz wrapper
+    files:
+      - LICENSE*
+      - README*

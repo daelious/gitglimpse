@@ -3,44 +3,28 @@ name: Release Binaries
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 jobs:
-  build:
+  goreleaser:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    strategy:
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
     steps:
-      # 1. Bumped checkout from v4 to v5
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Crucial: GoReleaser needs the full git history for tags
 
-      # 2. Bumped setup-go from v4 to v5
       - uses: actions/setup-go@v5
         with:
           go-version: 1.24
 
-      - name: Run tests
-        run: go test ./...
-
-      - name: Set binary extension for Windows
-        if: matrix.goos == 'windows'
-        run: echo "EXT=.exe" >> $GITHUB_ENV
-
-      - name: Build release binary
-        run: |
-          mkdir -p dist
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build -o dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} ./src/cmd/gitglimpse
-
-      - name: Create Release and Upload Asset
-        uses: softprops/action-gh-release@v2
+      # Runs the GoReleaser engine which reads your .goreleaser.yaml file
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          generate_release_notes: true
-          files: dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${{ env.EXT }}
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
