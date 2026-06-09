@@ -71,6 +71,7 @@ This repository includes GitHub Actions workflows for continuous integration and
 
 - `build.yml` runs on push to `main` and on pull requests.
 - `release.yml` builds cross-platform binaries when a GitHub release is published.
+- `branch-protection.yml` can enable protection rules for the `main` branch.
 
 ## Contributing
 

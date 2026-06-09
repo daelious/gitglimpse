@@ -1,0 +1,39 @@
+name: Branch Protection
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  enforce-protection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure branch protection for main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: main
+        run: |
+          cat > protection.json <<'EOF'
+          {
+            "required_status_checks": {
+              "strict": true,
+              "contexts": ["Go Build & Test"]
+            },
+            "enforce_admins": true,
+            "required_pull_request_reviews": {
+              "dismiss_stale_reviews": true,
+              "require_code_owner_reviews": false,
+              "required_approving_review_count": 1
+            },
+            "restrictions": null
+          }
+          EOF
+
+          curl -fsSL -X PUT "https://api.github.com/repos/${REPO}/branches/${BRANCH}/protection" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            --data @protection.json
