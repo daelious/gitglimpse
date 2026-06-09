@@ -1,15 +1,13 @@
 name: Release Binaries
 
-# 1. Change trigger to watch for tag pushes instead of manual releases
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Explicitly grant permission to write contents/releases
     permissions:
       contents: write
     strategy:
@@ -17,9 +15,11 @@ jobs:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-go@v5   # Updated to modern setup-go version
+      # 1. Bumped checkout from v4 to v5
+      - uses: actions/checkout@v5
+
+      # 2. Bumped setup-go from v4 to v5
+      - uses: actions/setup-go@v5
         with:
           go-version: 1.24
 
@@ -35,15 +35,12 @@ jobs:
           mkdir -p dist
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build -o dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} ./src/cmd/gitglimpse
 
-      # 2. Replaced the deprecated upload-release-asset action with softprops/action-gh-release.
-      # This single action handles both creating the release AND uploading the files.
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           release_name: Release ${{ github.ref_name }}
           generate_release_notes: true
-          # Points directly to the specific binary built by this matrix node
           files: dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${{ env.EXT }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
