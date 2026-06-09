@@ -1,34 +1,49 @@
 name: Release Binaries
 
+# 1. Change trigger to watch for tag pushes instead of manual releases
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Explicitly grant permission to write contents/releases
+    permissions:
+      contents: write
     strategy:
       matrix:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      
+      - uses: actions/setup-go@v5   # Updated to modern setup-go version
         with:
           go-version: 1.24
+
       - name: Run tests
         run: go test ./...
+
       - name: Set binary extension for Windows
         if: matrix.goos == 'windows'
         run: echo "EXT=.exe" >> $GITHUB_ENV
+
       - name: Build release binary
         run: |
           mkdir -p dist
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build -o dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} ./src/cmd/gitglimpse
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
+
+      # 2. Replaced the deprecated upload-release-asset action with softprops/action-gh-release.
+      # This single action handles both creating the release AND uploading the files.
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${{ env.EXT }}
-          asset_name: gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${{ env.EXT }}
-          asset_content_type: application/octet-stream
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          # Points directly to the specific binary built by this matrix node
+          files: dist/gitglimpse-${{ matrix.goos }}-${{ matrix.goarch }}${{ env.EXT }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
